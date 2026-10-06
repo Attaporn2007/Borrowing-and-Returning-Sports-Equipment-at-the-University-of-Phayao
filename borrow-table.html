@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ตารางยืม-คืนอุปกรณ์</title>
+  
+  <!-- CDN ตกแต่งหน้าตา (Tailwind + FontAwesome + Kanit Font) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap');
+    * { font-family: 'Kanit', sans-serif; }
+  </style>
+</head>
+<body class="bg-[#f0f4f8] p-6 text-slate-700">
+  <div class="max-w-6xl mx-auto space-y-6">
+
+    <!-- Header สวยงาม + ปุ่ม Logout -->
+    <header class="bg-white p-4 rounded-2xl shadow-sm border flex justify-between items-center">
+      <div class="flex items-center gap-3">
+        <span class="text-3xl">📦</span>
+        <div>
+          <h1 class="text-xl font-bold text-blue-600">ระบบยืม-คืนอุปกรณ์</h1>
+          <p class="text-xs text-slate-400">Database Project</p>
+        </div>
+      </div>
+      <nav class="flex items-center gap-2 text-sm font-medium">
+        <a href="index.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">ค้นหา</a>
+        <a href="borrow-table.html" class="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg">ตารางยืม-คืน</a>
+        <a href="dashboard.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">คลังอุปกรณ์</a>
+        <a href="status.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">สถานะ/Blacklist</a>
+        <a href="history.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">ประวัติรายวัน</a>
+        
+        <button onclick="logout()" class="ml-2 px-3 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg font-bold flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-right-from-bracket"></i> ออกจากระบบ
+        </button>
+      </nav>
+    </header>
+
+    <!-- Content ตารางยืม-คืน -->
+    <main class="bg-white p-6 rounded-2xl shadow-sm border">
+      <h2 class="font-bold text-slate-800 mb-4">รายการยืมปัจจุบัน</h2>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm text-left border">
+          <thead class="bg-slate-100 border-b text-slate-700">
+            <tr>
+              <th class="p-2 border text-center">ลำดับที่</th>
+              <th class="p-2 border">เลขบัตรปชช</th>
+              <th class="p-2 border">เลขบัตรนิสิต</th>
+              <th class="p-2 border">ชื่อจริง</th>
+              <th class="p-2 border">สิ่งของ</th>
+              <th class="p-2 border text-center">จำนวน</th>
+              <th class="p-2 border">ของค้ำประกัน</th>
+              <th class="p-2 border">เวลาที่ยืม</th>
+              <th class="p-2 border">เวลาที่คืน</th>
+              <th class="p-2 border text-center">จัดการ (3 ปุ่ม)</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    </main>
+
+  </div>
+
+  <script>
+    // 1. ระบบเช็คการล็อกอิน ( Auth Guard )
+    if (localStorage.getItem('isLoggedIn') !== 'true') {
+      alert('กรุณาเข้าสู่ระบบก่อนใช้งาน');
+      window.location.href = 'login.html';
+    }
+
+    // 2. ฟังก์ชันออกจากระบบ
+    function logout() {
+      if (confirm('คุณต้องการออกจากระบบใช่หรือไม่?')) {
+        localStorage.removeItem('isLoggedIn');
+        localStorage.removeItem('adminUser');
+        window.location.href = 'login.html';
+      }
+    }
+
+    // 3. โหลดข้อมูลตาราง
+    function loadData() {
+      const borrows = JSON.parse(localStorage.getItem('borrows') || '[]');
+      const active = borrows.filter(b => b.status === 'กำลังยืม');
+      const tbody = document.getElementById('table-body');
+      
+      tbody.innerHTML = active.map((b, index) => `
+        <tr class="border-b hover:bg-slate-50">
+          <td class="p-2 border text-center">${index + 1}</td>
+          <td class="p-2 border font-mono">${b.citizenId}</td>
+          <td class="p-2 border font-mono">${b.studentId}</td>
+          <td class="p-2 border font-bold text-slate-800">${b.name}</td>
+          <td class="p-2 border">${b.item}</td>
+          <td class="p-2 border text-center font-semibold">${b.qty}</td>
+          <td class="p-2 border">${b.collateral}</td>
+          <td class="p-2 border font-mono text-slate-500">${b.borrowTime}</td>
+          <td class="p-2 border font-mono text-slate-500">${b.returnTime || '-'}</td>
+          <td class="p-2 border text-center">
+            <div class="flex justify-center items-center gap-1.5">
+              <button onclick="completeBorrow(${b.id})" class="bg-emerald-500 hover:bg-emerald-600 text-white w-8 h-8 rounded-lg flex items-center justify-center shadow-sm transition" title="เสร็จสิ้น">
+                <i class="fa-solid fa-check"></i>
+              </button>
+              <button onclick="setBlacklist(${b.id})" class="bg-amber-500 hover:bg-amber-600 text-white px-2.5 h-8 rounded-lg flex items-center justify-center gap-1 text-xs font-bold shadow-sm transition" title="Blacklist">
+                <i class="fa-solid fa-triangle-exclamation"></i> Blacklist
+              </button>
+              <button onclick="cancelBorrow(${b.id})" class="bg-rose-500 hover:bg-rose-600 text-white w-8 h-8 rounded-lg flex items-center justify-center shadow-sm transition" title="ยกเลิก">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `).join('') || '<tr><td colspan="10" class="p-6 text-center text-slate-400">ไม่มีรายการยืม</td></tr>';
+    }
+
+    function completeBorrow(id) {
+      const borrows = JSON.parse(localStorage.getItem('borrows') || '[]');
+      const item = borrows.find(b => b.id === id);
+      if (item) {
+        const now = new Date();
+        item.status = 'คืนแล้ว';
+        item.returnTime = `${now.getHours()}.${now.getMinutes().toString().padStart(2,'0')}`;
+        localStorage.setItem('borrows', JSON.stringify(borrows));
+        loadData();
+      }
+    }
+
+    function setBlacklist(id) {
+      if (!confirm('ย้ายรายชื่อนี้ไปที่ Blacklist ใช่หรือไม่?')) return;
+      const borrows = JSON.parse(localStorage.getItem('borrows') || '[]');
+      const item = borrows.find(b => b.id === id);
+      if (item) {
+        item.status = 'Blacklist';
+        localStorage.setItem('borrows', JSON.stringify(borrows));
+        loadData();
+      }
+    }
+
+    function cancelBorrow(id) {
+      if (!confirm('ต้องการยกเลิกรายการนี้หรือไม่?')) return;
+      let borrows = JSON.parse(localStorage.getItem('borrows') || '[]');
+      borrows = borrows.filter(b => b.id !== id);
+      localStorage.setItem('borrows', JSON.stringify(borrows));
+      loadData();
+    }
+
+    loadData();
+  </script>
+</body>
+</html>

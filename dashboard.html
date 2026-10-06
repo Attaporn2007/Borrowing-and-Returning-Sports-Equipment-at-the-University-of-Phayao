@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>คลังอุปกรณ์</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap'); * { font-family: 'Kanit', sans-serif; }</style>
+</head>
+<body class="bg-[#f0f4f8] p-6 text-slate-700">
+  <div class="max-w-4xl mx-auto space-y-6">
+    <header class="bg-white p-4 rounded-2xl shadow-sm border flex justify-between items-center">
+      <h1 class="text-xl font-bold text-blue-600">คลังอุปกรณ์ (Dashboard)</h1>
+      <div class="flex items-center gap-3">
+        <nav class="flex gap-2 text-sm font-medium">
+          <a href="index.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">ค้นหา</a>
+          <a href="borrow-table.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">ตารางยืม-คืน</a>
+          <a href="dashboard.html" class="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg">คลังอุปกรณ์</a>
+          <a href="status.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">สถานะ/Blacklist</a>
+          <a href="history.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">ประวัติรายวัน</a>
+        </nav>
+        <button onclick="logout()" class="px-3 py-2 text-sm font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition">ออกจากระบบ</button>
+      </div>
+    </header>
+
+    <main class="bg-white p-6 rounded-2xl shadow-sm border space-y-4">
+      <h2 class="font-bold text-slate-800">เพิ่ม / ปรับจำนวนอุปกรณ์ในคลัง</h2>
+      <div class="flex gap-2">
+        <input type="text" id="item-name" placeholder="ชื่ออุปกรณ์" class="border rounded-lg px-3 py-2 text-sm flex-1">
+        <input type="number" id="item-qty" placeholder="จำนวน" value="1" class="border rounded-lg px-3 py-2 text-sm w-24">
+        <button onclick="addInventory()" class="bg-emerald-600 text-white text-sm px-4 py-2 rounded-lg font-medium">บันทึกอุปกรณ์</button>
+      </div>
+
+      <table class="w-full text-sm text-left border">
+        <tr class="bg-slate-100 border-b"><th class="p-2">ชื่ออุปกรณ์</th><th class="p-2 text-center">จำนวนคงเหลือ</th><th class="p-2 text-center">สถานะ</th><th class="p-2 text-center">จัดการ</th></tr>
+        <tbody id="inventory-body"></tbody>
+      </table>
+    </main>
+  </div>
+
+  <script>
+    function getInv() { return JSON.parse(localStorage.getItem('inventory') || '[{"id":1,"name":"ไม้แบด+ลูก","qty":2},{"id":2,"name":"สายแปลง HDMI","qty":0}]'); }
+
+    function renderInv() {
+      const inv = getInv();
+      document.getElementById('inventory-body').innerHTML = inv.map(i => {
+        const isOut = i.qty <= 0;
+        return `
+          <tr class="border-b">
+            <td class="p-2 font-medium">${i.name}</td>
+            <td class="p-2 text-center">
+              <input type="number" value="${i.qty}" onchange="updateQty(${i.id}, this.value)" class="w-16 border text-center rounded px-1">
+            </td>
+            <td class="p-2 text-center">
+              <span class="px-2 py-1 text-xs rounded-full font-bold ${isOut ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'}">
+                ${isOut ? 'ของหมด' : 'มีของในคลัง'}
+              </span>
+            </td>
+            <td class="p-2 text-center"><button onclick="deleteInv(${i.id})" class="text-rose-500 font-bold">ลบ</button></td>
+          </tr>`;
+      }).join('');
+    }
+
+    function addInventory() {
+      const name = document.getElementById('item-name').value;
+      const qty = parseInt(document.getElementById('item-qty').value);
+      if(!name) return;
+      const inv = getInv();
+      inv.push({ id: Date.now(), name, qty });
+      localStorage.setItem('inventory', JSON.stringify(inv));
+      renderInv();
+    }
+
+    function updateQty(id, newQty) {
+      const inv = getInv();
+      const item = inv.find(i => i.id === id);
+      if (item) {
+        item.qty = parseInt(newQty) || 0;
+        localStorage.setItem('inventory', JSON.stringify(inv));
+        renderInv();
+      }
+    }
+
+    function deleteInv(id) {
+      let inv = getInv().filter(i => i.id !== id);
+      localStorage.setItem('inventory', JSON.stringify(inv));
+      renderInv();
+    }
+
+    function logout() {
+      sessionStorage.clear();
+      localStorage.removeItem('isLoggedIn');
+      localStorage.removeItem('currentUser');
+      alert('ออกจากระบบเรียบร้อยแล้ว');
+      window.location.href = 'index.html';
+    }
+
+    renderInv();
+  </script>
+</body>
+</html>

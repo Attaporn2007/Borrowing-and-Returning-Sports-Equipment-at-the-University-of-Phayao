@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>โปรไฟล์ผู้ยืม</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap');
+    * { font-family: 'Kanit', sans-serif; }
+  </style>
+</head>
+<body class="bg-[#f0f4f8] p-6 text-slate-700">
+  <div class="max-w-4xl mx-auto space-y-6">
+    
+    <!-- Top Bar -->
+    <div class="flex justify-between items-center">
+      <a href="index.html" class="bg-white px-4 py-2 rounded-xl text-xs font-semibold shadow-sm border hover:bg-slate-50 transition flex items-center gap-2">
+        <i class="fa-solid fa-arrow-left"></i> ย้อนกลับไปหน้าแรก
+      </a>
+      <span class="text-xs font-semibold text-slate-400">โปรไฟล์ผู้ยืม</span>
+    </div>
+
+    <!-- ส่วนที่ 1: การแสดงโปรไฟล์ / ฟอร์มลงทะเบียนใหม่ -->
+    <div id="profile-card" class="bg-white p-6 rounded-2xl shadow-sm border"></div>
+
+    <!-- ส่วนที่ 2: ฟอร์มยืมอุปกรณ์ -->
+    <div id="borrow-form-section" class="bg-white p-6 rounded-2xl shadow-sm border hidden">
+      <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2 text-emerald-600">
+        <i class="fa-solid fa-circle-plus"></i> บันทึกการยืมอุปกรณ์ใหม่
+      </h3>
+      <form onsubmit="handleBorrow(event)" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <input type="text" id="borrow-item" required placeholder="ของที่ยืม (เช่น ไม้แบด+ลูก)" class="border rounded-lg p-2.5 text-sm outline-none focus:border-blue-500 md:col-span-1">
+        
+        <!-- ปรับเป็น type="text" เพื่อให้รองรับข้อความเช่น "2+1" หรือ "1 ชุด" ได้ -->
+        <input type="text" id="borrow-qty" value="1" required placeholder="จำนวน (เช่น 1 หรือ 2+1)" class="border rounded-lg p-2.5 text-sm outline-none focus:border-blue-500 text-center">
+        
+        <input type="text" id="borrow-collateral" required placeholder="ของค้ำประกัน (เช่น บัตรประชาชน/กระเป๋า)" class="border rounded-lg p-2.5 text-sm outline-none focus:border-blue-500 md:col-span-1">
+        <button type="submit" class="bg-emerald-600 text-white font-medium p-2.5 rounded-lg text-sm hover:bg-emerald-700 transition flex items-center justify-center gap-1">
+          <i class="fa-solid fa-plus"></i> เพิ่มลงในรายการ
+        </button>
+      </form>
+    </div>
+
+    <!-- ส่วนที่ 3: ประวัติการยืม -->
+    <div id="history-section" class="bg-white p-6 rounded-2xl shadow-sm border hidden">
+      <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2 text-amber-600">
+        <i class="fa-solid fa-clock-rotate-left"></i> ประวัติการยืม (เคยยืมวันไหน/อะไร)
+      </h3>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs text-left border">
+          <thead class="bg-slate-50 border-b">
+            <tr>
+              <th class="p-2 border">อุปกรณ์</th>
+              <th class="p-2 border text-center">จำนวน</th>
+              <th class="p-2 border">เวลายืม</th>
+              <th class="p-2 border">เวลาคืน</th>
+              <th class="p-2 border text-center">สถานะ</th>
+            </tr>
+          </thead>
+          <tbody id="user-history-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    if (localStorage.getItem('isLoggedIn') !== 'true') window.location.href = 'login.html';
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const searchId = urlParams.get('searchId') || urlParams.get('id');
+    const isNew = urlParams.get('isNew') === 'true';
+    const type = urlParams.get('type');
+
+    let currentUser = null;
+
+    function init() {
+      const users = JSON.parse(localStorage.getItem('users') || '[]');
+      currentUser = users.find(u => u.studentId === searchId || u.citizenId === searchId);
+
+      if (isNew || !currentUser) {
+        renderNewUserForm();
+      } else {
+        renderUserProfile();
+      }
+    }
+
+    function renderNewUserForm() {
+      const isStudent = type === 'student' || (searchId && searchId.length === 8);
+      const studentIdVal = isStudent ? searchId : '';
+      const citizenIdVal = !isStudent ? searchId : '';
+
+      document.getElementById('profile-card').innerHTML = `
+        <div class="border-b pb-4 mb-4">
+          <h2 class="text-lg font-bold text-amber-600 flex items-center gap-2">
+            <i class="fa-solid fa-user-plus"></i> ลงทะเบียนข้อมูลผู้ยืมใหม่
+          </h2>
+          <p class="text-xs text-slate-400 mt-1">กรุณากรอกข้อมูลส่วนตัวเพื่อเข้าใช้งานระบบยืม-คืนอุปกรณ์</p>
+        </div>
+
+        <form onsubmit="saveNewUser(event)" class="space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold mb-1">ชื่อ-นามสกุล <span class="text-rose-500">*</span></label>
+              <input type="text" id="reg-name" required placeholder="นาย/นางสาว ..." class="w-full border rounded-lg p-2.5 text-sm outline-none focus:border-blue-500">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold mb-1">เบอร์โทรศัพท์ <span class="text-rose-500">*</span></label>
+              <input type="tel" id="reg-phone" required placeholder="08X-XXX-XXXX" class="w-full border rounded-lg p-2.5 text-sm outline-none focus:border-blue-500">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold mb-1">รหัสนิสิต (8 หลัก)</label>
+              <input type="text" id="reg-student-id" maxlength="8" value="${studentIdVal}" ${isStudent ? 'readonly' : 'required'} class="w-full border rounded-lg p-2.5 text-sm outline-none ${isStudent ? 'bg-slate-100 text-slate-500 font-mono' : 'focus:border-blue-500'}">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold mb-1">เลขบัตรประชาชน (13 หลัก)</label>
+              <input type="text" id="reg-citizen-id" maxlength="13" value="${citizenIdVal}" ${!isStudent ? 'readonly' : 'required'} class="w-full border rounded-lg p-2.5 text-sm outline-none ${!isStudent ? 'bg-slate-100 text-slate-500 font-mono' : 'focus:border-blue-500'}">
+            </div>
+          </div>
+          <button type="submit" class="w-full bg-blue-600 text-white font-medium py-2.5 rounded-lg text-sm hover:bg-blue-700 transition">
+            บันทึกข้อมูลผู้ยืมและดำเนินการต่อ
+          </button>
+        </form>
+      `;
+    }
+
+    function saveNewUser(e) {
+      e.preventDefault();
+      const name = document.getElementById('reg-name').value.trim();
+      const phone = document.getElementById('reg-phone').value.trim();
+      const studentId = document.getElementById('reg-student-id').value.trim();
+      const citizenId = document.getElementById('reg-citizen-id').value.trim();
+
+      if (studentId.length !== 8 || citizenId.length !== 13) {
+        alert('กรุณากรอกรหัสนิสิต (8 หลัก) และ เลขบัตรประชาชน (13 หลัก) ให้ถูกต้อง');
+        return;
+      }
+
+      const users = JSON.parse(localStorage.getItem('users') || '[]');
+      currentUser = { name, phone, studentId, citizenId, status: 'ปกติ' };
+      users.push(currentUser);
+      localStorage.setItem('users', JSON.stringify(users));
+
+      alert('บันทึกข้อมูลผู้ยืมเรียบร้อยแล้ว!');
+      renderUserProfile();
+    }
+
+    function renderUserProfile() {
+      document.getElementById('profile-card').innerHTML = `
+        <div class="flex justify-between items-start">
+          <div>
+            <h2 class="text-xl font-bold text-slate-800">${currentUser.name}</h2>
+            <p class="text-xs text-slate-500 mt-1 font-mono">
+              รหัสนิสิต: <span class="font-bold text-slate-700">${currentUser.studentId}</span> | 
+              เลขบัตร: <span class="font-bold text-slate-700">${currentUser.citizenId}</span> | 
+              เบอร์โทร: <span class="font-bold text-slate-700">${currentUser.phone || '-'}</span>
+            </p>
+          </div>
+          <span class="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold">
+            สถานะ${currentUser.status || 'ปกติ'}
+          </span>
+        </div>
+      `;
+
+      document.getElementById('borrow-form-section').classList.remove('hidden');
+      document.getElementById('history-section').classList.remove('hidden');
+      loadUserHistory();
+    }
+
+    function handleBorrow(e) {
+      e.preventDefault();
+      const item = document.getElementById('borrow-item').value;
+      const qty = document.getElementById('borrow-qty').value;
+      const collateral = document.getElementById('borrow-collateral').value;
+
+      const now = new Date();
+      const borrowTime = `${now.getHours()}.${now.getMinutes().toString().padStart(2,'0')}`;
+
+      const borrows = JSON.parse(localStorage.getItem('borrows') || '[]');
+      borrows.push({
+        id: Date.now(),
+        studentId: currentUser.studentId,
+        citizenId: currentUser.citizenId,
+        name: currentUser.name,
+        item,
+        qty,
+        collateral,
+        borrowTime,
+        status: 'กำลังยืม'
+      });
+
+      localStorage.setItem('borrows', JSON.stringify(borrows));
+      alert('บันทึกรายการยืมสำเร็จ!');
+      
+      window.location.href = 'borrow-table.html';
+    }
+
+    function loadUserHistory() {
+      const borrows = JSON.parse(localStorage.getItem('borrows') || '[]');
+      const userBorrows = borrows.filter(b => b.studentId === currentUser.studentId || b.citizenId === currentUser.citizenId);
+      const tbody = document.getElementById('user-history-body');
+
+      tbody.innerHTML = userBorrows.map(b => `
+        <tr class="border-b">
+          <td class="p-2 border font-medium">${b.item}</td>
+          <td class="p-2 border text-center font-bold">${b.qty}</td>
+          <td class="p-2 border font-mono text-slate-500">${b.borrowTime}</td>
+          <td class="p-2 border font-mono text-slate-500">${b.returnTime || '-'}</td>
+          <td class="p-2 border text-center">
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${b.status === 'กำลังยืม' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}">${b.status}</span>
+          </td>
+        </tr>
+      `).join('') || '<tr><td colspan="5" class="p-4 text-center text-slate-400">ยังไม่มีประวัติการยืม</td></tr>';
+    }
+
+    init();
+  </script>
+</body>
+</html>

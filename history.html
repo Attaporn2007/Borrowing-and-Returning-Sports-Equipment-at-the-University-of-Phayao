@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ประวัติรายวัน</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap'); * { font-family: 'Kanit', sans-serif; }</style>
+</head>
+<body class="bg-[#f0f4f8] p-6 text-slate-700">
+  <div class="max-w-4xl mx-auto space-y-6">
+    <header class="bg-white p-4 rounded-2xl shadow-sm border flex justify-between items-center">
+      <h1 class="text-xl font-bold text-blue-600">ประวัติทำรายการรายวัน</h1>
+      <nav class="flex gap-2 text-sm font-medium">
+        <a href="index.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">ค้นหา</a>
+        <a href="borrow-table.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">ตารางยืม-คืน</a>
+        <a href="dashboard.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">คลังอุปกรณ์</a>
+        <a href="status.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">สถานะ/Blacklist</a>
+        <a href="history.html" class="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg">ประวัติรายวัน</a>
+      </nav>
+    </header>
+
+    <main class="bg-white p-6 rounded-2xl shadow-sm border">
+      <table class="w-full text-sm text-left border">
+        <tr class="bg-slate-100 border-b"><th class="p-2">ชื่อผู้ยืม</th><th class="p-2">อุปกรณ์</th><th class="p-2">เวลายืม</th><th class="p-2">สถานะปัจจุบัน</th></tr>
+        <tbody id="history-body"></tbody>
+      </table>
+    </main>
+  </div>
+
+  <script>
+    const borrows = JSON.parse(localStorage.getItem('borrows') || '[]');
+    document.getElementById('history-body').innerHTML = borrows.map(b => `
+      <tr class="border-b">
+        <td class="p-2 font-bold">${b.name} (${b.studentId})</td>
+        <td class="p-2">${b.item} (${b.qty})</td>
+        <td class="p-2 font-mono">${b.borrowTime}</td>
+        <td class="p-2"><span class="px-2 py-0.5 text-xs rounded font-bold ${b.status === 'Blacklist' ? 'bg-rose-100 text-rose-600' : b.status === 'คืนแล้ว' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}">${b.status}</span></td>
+      </tr>
+    `).join('') || '<tr><td colspan="4" class="p-4 text-center text-slate-400">ยังไม่มีประวัติทำรายการ</td></tr>';
+  </script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>สถานะคืนแล้ว & Blacklist</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap'); * { font-family: 'Kanit', sans-serif; }</style>
+</head>
+<body class="bg-[#f0f4f8] p-6 text-slate-700">
+  <div class="max-w-5xl mx-auto space-y-6">
+    <header class="bg-white p-4 rounded-2xl shadow-sm border flex justify-between items-center">
+      <h1 class="text-xl font-bold text-blue-600">สถานะ คืนแล้ว & Blacklist</h1>
+      <nav class="flex gap-2 text-sm font-medium">
+        <a href="index.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">ค้นหา</a>
+        <a href="borrow-table.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">ตารางยืม-คืน</a>
+        <a href="dashboard.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">คลังอุปกรณ์</a>
+        <a href="status.html" class="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg">สถานะ/Blacklist</a>
+        <a href="history.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">ประวัติรายวัน</a>
+      </nav>
+    </header>
+
+    <!-- Blacklist Section -->
+    <div class="bg-white p-6 rounded-2xl shadow-sm border border-rose-100">
+      <h2 class="font-bold text-rose-600 mb-3">🚨 รายชื่อยังไม่คืนอุปกรณ์ ( ติด Blacklist )</h2>
+      <table class="w-full text-sm text-left">
+        <tr class="bg-rose-50 border-b text-rose-700"><th class="p-2">ชื่อ/รหัสนิสิต</th><th class="p-2">อุปกรณ์</th><th class="p-2">ของค้ำ</th><th class="p-2">สถานะ</th></tr>
+        <tbody id="bl-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Returned Section -->
+    <div class="bg-white p-6 rounded-2xl shadow-sm border">
+      <h2 class="font-bold text-emerald-600 mb-3">✅ รายการที่คืนเรียบร้อยแล้ว</h2>
+      <table class="w-full text-sm text-left">
+        <tr class="bg-emerald-50 border-b text-emerald-700"><th class="p-2">ชื่อ/รหัสนิสิต</th><th class="p-2">อุปกรณ์</th><th class="p-2">เวลาคืน</th><th class="p-2">สถานะ</th></tr>
+        <tbody id="ret-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const borrows = JSON.parse(localStorage.getItem('borrows') || '[]');
+    
+    document.getElementById('bl-body').innerHTML = borrows.filter(b => b.status === 'Blacklist').map(b => `
+      <tr class="border-b"><td class="p-2 font-bold">${b.name} (${b.studentId})</td><td class="p-2 text-rose-600">${b.item}</td><td class="p-2">${b.collateral}</td><td class="p-2"><span class="bg-rose-100 text-rose-700 text-xs px-2 py-0.5 rounded font-bold">Blacklist</span></td></tr>
+    `).join('') || '<tr><td colspan="4" class="p-2 text-slate-400 text-center">ไม่มีรายชื่อติด Blacklist</td></tr>';
+
+    document.getElementById('ret-body').innerHTML = borrows.filter(b => b.status === 'คืนแล้ว').map(b => `
+      <tr class="border-b"><td class="p-2 font-bold">${b.name} (${b.studentId})</td><td class="p-2">${b.item}</td><td class="p-2">${b.returnTime}</td><td class="p-2"><span class="bg-emerald-100 text-emerald-700 text-xs px-2 py-0.5 rounded font-bold">คืนแล้ว</span></td></tr>
+    `).join('') || '<tr><td colspan="4" class="p-2 text-slate-400 text-center">ยังไม่มีรายการคืน</td></tr>';
+  </script>
+</body>
+</html>
