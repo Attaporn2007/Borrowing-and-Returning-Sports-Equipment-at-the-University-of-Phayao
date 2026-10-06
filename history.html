@@ -4,6 +4,7 @@
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ประวัติรายวัน</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap'); * { font-family: 'Kanit', sans-serif; }</style>
 </head>
 <body class="bg-[#f0f4f8] p-6 text-slate-700">
@@ -16,6 +17,9 @@
         <a href="dashboard.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">คลังอุปกรณ์</a>
         <a href="status.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">สถานะ/Blacklist</a>
         <a href="history.html" class="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg">ประวัติรายวัน</a>
+        <button onclick="logout()" class="ml-2 px-3 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg font-bold flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-right-from-bracket"></i> ออกจากระบบ
+        </button>
       </nav>
     </header>
 
@@ -28,6 +32,20 @@
   </div>
 
   <script>
+    if (localStorage.getItem('isLoggedIn') !== 'true') {
+      alert('กรุณาเข้าสู่ระบบก่อนใช้งาน');
+      window.location.href = 'login.html';
+    }
+
+    function logout() {
+      if (confirm('คุณต้องการออกจากระบบใช่หรือไม่?')) {
+        localStorage.removeItem('isLoggedIn');
+        localStorage.removeItem('adminUser');
+        sessionStorage.removeItem('isLoggedIn');
+        window.location.href = 'login.html';
+      }
+    }
+
     const borrows = JSON.parse(localStorage.getItem('borrows') || '[]');
     document.getElementById('history-body').innerHTML = borrows.map(b => `
       <tr class="border-b">
