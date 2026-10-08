@@ -5,6 +5,8 @@
   <title>สถานะคืนแล้ว & Blacklist</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
   <style>@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap'); * { font-family: 'Kanit', sans-serif; }</style>
 </head>
 <body class="bg-[#f0f4f8] p-6 text-slate-700">
@@ -25,9 +27,17 @@
 
     <!-- Blacklist Section -->
     <div class="bg-white p-6 rounded-2xl shadow-sm border border-rose-100">
-      <h2 class="font-bold text-rose-600 mb-3">🚨 รายชื่อยังไม่คืนอุปกรณ์ ( ติด Blacklist )</h2>
+      <div class="flex justify-between items-center mb-3">
+        <h2 class="font-bold text-rose-600">🚨 รายชื่อยังไม่คืนอุปกรณ์ ( ติด Blacklist )</h2>
+        <button onclick="unblacklist()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-unlock"></i> ปลด
+        </button>
+      </div>
       <table class="w-full text-sm text-left">
-        <tr class="bg-rose-50 border-b text-rose-700"><th class="p-2">ชื่อ/รหัสนิสิต</th><th class="p-2">อุปกรณ์</th><th class="p-2">ของค้ำ</th><th class="p-2">สถานะ</th></tr>
+        <tr class="bg-rose-50 border-b text-rose-700">
+          <th class="p-2 w-10 text-center"><input type="checkbox" onclick="toggleAllBl(this)"></th>
+          <th class="p-2">ชื่อ/รหัสนิสิต</th><th class="p-2">อุปกรณ์</th><th class="p-2">เหตุผล</th><th class="p-2">สถานะ</th>
+        </tr>
         <tbody id="bl-body"></tbody>
       </table>
     </div>
@@ -36,7 +46,7 @@
     <div class="bg-white p-6 rounded-2xl shadow-sm border">
       <h2 class="font-bold text-emerald-600 mb-3">✅ รายการที่คืนเรียบร้อยแล้ว</h2>
       <table class="w-full text-sm text-left">
-        <tr class="bg-emerald-50 border-b text-emerald-700"><th class="p-2">ชื่อ/รหัสนิสิต</th><th class="p-2">อุปกรณ์</th><th class="p-2">เวลาคืน</th><th class="p-2">สถานะ</th></tr>
+        <tr class="bg-emerald-50 border-b text-emerald-700"><th class="p-2">ชื่อ/รหัสนิสิต</th><th class="p-2">อุปกรณ์</th><th class="p-2">สถานะ</th></tr>
         <tbody id="ret-body"></tbody>
       </table>
     </div>
@@ -57,15 +67,95 @@
       }
     }
 
-    const borrows = JSON.parse(localStorage.getItem('borrows') || '[]');
-    
-    document.getElementById('bl-body').innerHTML = borrows.filter(b => b.status === 'Blacklist').map(b => `
-      <tr class="border-b"><td class="p-2 font-bold">${b.name} (${b.studentId})</td><td class="p-2 text-rose-600">${b.item}</td><td class="p-2">${b.collateral}</td><td class="p-2"><span class="bg-rose-100 text-rose-700 text-xs px-2 py-0.5 rounded font-bold">Blacklist</span></td></tr>
-    `).join('') || '<tr><td colspan="4" class="p-2 text-slate-400 text-center">ไม่มีรายชื่อติด Blacklist</td></tr>';
+    function toggleAllBl(el) {
+      document.querySelectorAll('.bl-check').forEach(cb => { cb.checked = el.checked; });
+    }
 
-    document.getElementById('ret-body').innerHTML = borrows.filter(b => b.status === 'คืนแล้ว').map(b => `
-      <tr class="border-b"><td class="p-2 font-bold">${b.name} (${b.studentId})</td><td class="p-2">${b.item}</td><td class="p-2">${b.returnTime}</td><td class="p-2"><span class="bg-emerald-100 text-emerald-700 text-xs px-2 py-0.5 rounded font-bold">คืนแล้ว</span></td></tr>
-    `).join('') || '<tr><td colspan="4" class="p-2 text-slate-400 text-center">ยังไม่มีรายการคืน</td></tr>';
+    // ปลดล็อกจาก Blacklist เฉพาะรายการที่ติ๊กเลือก (ใช้ปุ่มเดียว)
+    async function unblacklist() {
+      const checked = Array.from(document.querySelectorAll('.bl-check:checked'));
+      if (!checked.length) { alert('กรุณาติ๊กเลือกรายชื่อที่ต้องการปลด'); return; }
+      if (!confirm(`ยืนยันปลดล็อกจาก Blacklist ${checked.length} รายการ?`)) return;
+
+      const stamp = nowISO();
+      for (const cb of checked) {
+        const blacklistId = cb.dataset.blacklistId;
+        const borrowId = cb.dataset.borrowId;
+        const returnId = cb.dataset.returnId;
+
+        if (blacklistId) {
+          await sb.from('blacklist').update({ status: 'ปลดล็อกแล้ว' }).eq('blacklist_id', blacklistId);
+        }
+        if (returnId) {
+          // ให้เวลาคืนจริงตรงกับตอนปลด เพื่อให้หน้าประวัติแสดงถูกต้อง
+          await sb.from('return').update({ returndatetime: stamp }).eq('return_id', returnId);
+        }
+        if (borrowId) {
+          // ปลดแล้วถือว่าคืนเรียบร้อย (ไม่วนกลับเป็นเกินกำหนด)
+          await sb.from('borrow').update({ status: 'คืนแล้ว' }).eq('borrow_id', borrowId);
+          await sb.from('borrowitem').update({ status: 'คืนแล้ว' }).eq('borrow_id', borrowId);
+        }
+      }
+      location.reload();
+    }
+
+    (async () => {
+    const bundle = await getBorrowBundle();
+    const { borrows, borrowitems, items } = bundle;
+
+    const itemMap = {}, borrowMap = {};
+    (items || []).forEach(i => itemMap[i.item_id] = i);
+    (borrows || []).forEach(b => borrowMap[b.borrow_id] = b);
+
+    const namesOf = (borrowId) => {
+      const lines = (borrowitems || []).filter(x => x.borrow_id === borrowId);
+      return lines.map(x => itemMap[x.item_id] ? itemMap[x.item_id].itemname : (x.itemname || 'อุปกรณ์ #' + x.item_id)).join(', ') || '-';
+    };
+
+    // รายชื่อ Blacklist จากตาราง blacklist + return (ถ้าอ่านไม่ได้ใช้ borrow สถานะ Blacklist แทน)
+    let blRows = null;
+    try {
+      const [r1, r2] = await Promise.all([
+        sb.from('blacklist').select('*'),
+        sb.from('return').select('*')
+      ]);
+      if (!r1.error && !r2.error && Array.isArray(r1.data)) {
+        const retMap = {};
+        (r2.data || []).forEach(r => retMap[r.return_id] = r);
+        blRows = (r1.data || []).filter(x => x.status === 'ติด Blacklist').map(x => {
+          const ret = retMap[x.return_id] || {};
+          const bi = (borrowitems || []).find(y => y.borrowitem_id === ret.borrowitem_id) || {};
+          const b = borrowMap[bi.borrow_id] || {};
+          return {
+            blacklist_id: x.blacklist_id,
+            return_id: x.return_id,
+            borrow_id: bi.borrow_id,
+            name: b.borrowname || '-',
+            student: b.student_id || '-',
+            itemNames: namesOf(bi.borrow_id),
+            reason: x.reason || '-'
+          };
+        });
+      }
+    } catch (e) { }
+
+    if (!blRows) {
+      blRows = (borrows || []).filter(b => b.status === 'Blacklist').map(b => ({
+        blacklist_id: '', return_id: '', borrow_id: b.borrow_id, name: b.borrowname, student: b.student_id, itemNames: namesOf(b.borrow_id), reason: '-'
+      }));
+    }
+
+    document.getElementById('bl-body').innerHTML = blRows.map(b => `
+      <tr class="border-b">
+        <td class="p-2 text-center"><input type="checkbox" class="bl-check" data-blacklist-id="${b.blacklist_id || ''}" data-return-id="${b.return_id || ''}" data-borrow-id="${b.borrow_id || ''}"></td>
+        <td class="p-2 font-bold">${b.name} (${b.student})</td><td class="p-2 text-rose-600">${b.itemNames}</td><td class="p-2">${b.reason}</td><td class="p-2"><span class="bg-rose-100 text-rose-700 text-xs px-2 py-0.5 rounded font-bold">Blacklist</span></td>
+      </tr>
+    `).join('') || '<tr><td colspan="5" class="p-2 text-slate-400 text-center">ไม่มีรายชื่อติด Blacklist</td></tr>';
+
+    document.getElementById('ret-body').innerHTML = (borrows || []).filter(b => b.status === 'คืนแล้ว').map(b => `
+      <tr class="border-b"><td class="p-2 font-bold">${b.borrowname} (${b.student_id})</td><td class="p-2">${namesOf(b.borrow_id)}</td><td class="p-2"><span class="bg-emerald-100 text-emerald-700 text-xs px-2 py-0.5 rounded font-bold">คืนแล้ว</span></td></tr>
+    `).join('') || '<tr><td colspan="3" class="p-2 text-slate-400 text-center">ยังไม่มีรายการคืน</td></tr>';
+    })();
   </script>
 </body>
 </html>

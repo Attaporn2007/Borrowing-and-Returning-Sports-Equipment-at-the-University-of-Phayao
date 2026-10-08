@@ -5,10 +5,12 @@
   <title>ประวัติรายวัน</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
   <style>@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap'); * { font-family: 'Kanit', sans-serif; }</style>
 </head>
 <body class="bg-[#f0f4f8] p-6 text-slate-700">
-  <div class="max-w-4xl mx-auto space-y-6">
+  <div class="max-w-5xl mx-auto space-y-6">
     <header class="bg-white p-4 rounded-2xl shadow-sm border flex justify-between items-center">
       <h1 class="text-xl font-bold text-blue-600">ประวัติทำรายการรายวัน</h1>
       <nav class="flex gap-2 text-sm font-medium">
@@ -23,11 +25,38 @@
       </nav>
     </header>
 
-    <main class="bg-white p-6 rounded-2xl shadow-sm border">
-      <table class="w-full text-sm text-left border">
-        <tr class="bg-slate-100 border-b"><th class="p-2">ชื่อผู้ยืม</th><th class="p-2">อุปกรณ์</th><th class="p-2">เวลายืม</th><th class="p-2">สถานะปัจจุบัน</th></tr>
-        <tbody id="history-body"></tbody>
-      </table>
+    <main class="bg-white p-6 rounded-2xl shadow-sm border space-y-4">
+      <div class="flex flex-wrap gap-3 items-end justify-between">
+        <div class="flex flex-wrap gap-3 items-end">
+          <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1">เลือกวันที่</label>
+            <input type="date" id="filter-date"
+              class="px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1">ค้นหา (รหัสนิสิต / ชื่อผู้ยืม)</label>
+            <input type="text" id="search-input" placeholder="พิมพ์รหัสนิสิต หรือชื่อผู้ยืม..."
+              class="px-3 py-2 border rounded-lg text-sm w-72 focus:outline-none focus:ring-2 focus:ring-blue-400">
+          </div>
+        </div>
+        <p id="summary" class="text-xs text-slate-400 pb-2"></p>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm text-left border">
+          <thead class="bg-slate-100 border-b text-slate-600">
+            <tr>
+              <th class="p-2 whitespace-nowrap">วัน-เวลาที่ยืม</th>
+              <th class="p-2 whitespace-nowrap">รหัสนิสิต</th>
+              <th class="p-2 whitespace-nowrap">ชื่อผู้ยืม</th>
+              <th class="p-2">รายการอุปกรณ์ที่ยืม</th>
+              <th class="p-2 whitespace-nowrap">สถานะ</th>
+              <th class="p-2 whitespace-nowrap">วัน-เวลาที่คืนจริง</th>
+            </tr>
+          </thead>
+          <tbody id="history-body"></tbody>
+        </table>
+      </div>
     </main>
   </div>
 
@@ -46,15 +75,112 @@
       }
     }
 
-    const borrows = JSON.parse(localStorage.getItem('borrows') || '[]');
-    document.getElementById('history-body').innerHTML = borrows.map(b => `
-      <tr class="border-b">
-        <td class="p-2 font-bold">${b.name} (${b.studentId})</td>
-        <td class="p-2">${b.item} (${b.qty})</td>
-        <td class="p-2 font-mono">${b.borrowTime}</td>
-        <td class="p-2"><span class="px-2 py-0.5 text-xs rounded font-bold ${b.status === 'Blacklist' ? 'bg-rose-100 text-rose-600' : b.status === 'คืนแล้ว' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}">${b.status}</span></td>
-      </tr>
-    `).join('') || '<tr><td colspan="4" class="p-4 text-center text-slate-400">ยังไม่มีประวัติทำรายการ</td></tr>';
+    // แปลง timestamp เป็น YYYY-MM-DD ตามเวลาท้องถิ่น (ใช้เทียบกับ <input type="date">)
+    function toDateStr(iso) {
+      const d = parseDT(iso);
+      if (!d) return '';
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function badge(status) {
+      const s = String(status || '');
+      if (s === 'คืนแล้ว') return 'bg-emerald-100 text-emerald-600';
+      if (s === 'เกินกำหนด' || s === 'Blacklist') return 'bg-rose-100 text-rose-600';
+      return 'bg-amber-100 text-amber-600';
+    }
+
+    let allRows = [];
+
+    function render() {
+      const dateVal = document.getElementById('filter-date').value;
+      const q = document.getElementById('search-input').value.trim().toLowerCase();
+
+      const rows = allRows
+        .filter(r => {
+          if (dateVal && r.dateStr !== dateVal) return false;
+          if (q && !(String(r.student_id || '').toLowerCase().includes(q) ||
+                     String(r.borrowname || '').toLowerCase().includes(q))) return false;
+          return true;
+        })
+        .sort((a, b) => b.ts - a.ts); // ล่าสุดขึ้นก่อน (borrowdatetime DESC)
+
+      document.getElementById('summary').textContent = `พบ ${rows.length} รายการ`;
+
+      document.getElementById('history-body').innerHTML = rows.length
+        ? rows.map(r => `
+          <tr class="border-b hover:bg-slate-50">
+            <td class="p-2 font-mono whitespace-nowrap">${fmtDT(r.borrowdatetime)}</td>
+            <td class="p-2 font-mono">${r.student_id || '-'}</td>
+            <td class="p-2 font-bold">${r.borrowname || '-'}</td>
+            <td class="p-2">${r.itemText}</td>
+            <td class="p-2"><span class="px-2 py-0.5 text-xs rounded font-bold ${badge(r.status)}">${r.status || '-'}</span></td>
+            <td class="p-2 font-mono whitespace-nowrap">${r.returnTime ? fmtDT(r.returnTime) : '-'}</td>
+          </tr>`).join('')
+        : '<tr><td colspan="6" class="p-6 text-center text-slate-400">ไม่พบประวัติการทำรายการในวันที่เลือก</td></tr>';
+    }
+
+    (async () => {
+      const bundle = await getBorrowBundle();
+      const { borrows, borrowitems, items, returns } = bundle;
+
+      const itemMap = {};
+      (items || []).forEach(i => { itemMap[i.item_id] = i; });
+
+      // map: borrowitem_id -> เวลาคืนจริง (ใช้ค่าล่าสุดถ้ามีหลายแถว)
+      // รองรับทั้งคอลัมน์ returndatetime และ fallback เป็น duetime กรณียังไม่เพิ่มคอลัมน์ใน DB
+      const returnMap = {};
+      (returns || []).forEach(r => {
+        const bid = r.borrowitem_id;
+        const t = r.returndatetime || r.duetime || null;
+        if (bid == null || !t) return;
+        const prev = returnMap[bid];
+        const a = parseDT(t), b = parseDT(prev);
+        if (!prev || (a && b && a.getTime() > b.getTime())) returnMap[bid] = t;
+      });
+
+      allRows = (borrows || []).map(b => {
+        const lines = (borrowitems || []).filter(x => x.borrow_id === b.borrow_id);
+
+        const itemText = lines.map(x => {
+          const it = itemMap[x.item_id];
+          const name = (it && it.itemname) || x.itemname || ('อุปกรณ์ #' + x.item_id);
+          return `${name} (${x.quantity})`;
+        }).join(', ') || '-';
+
+        // เวลาคืนจริงแสดงเฉพาะรายการที่คืนแล้ว (Blacklist/เกินกำหนด ไม่ถือว่าคืน)
+        let returnTime = null;
+        if (String(b.status) === 'คืนแล้ว') {
+          lines.forEach(x => {
+            const t = returnMap[x.borrowitem_id];
+            if (t && (!returnTime || (parseDT(t) && parseDT(returnTime) && parseDT(t).getTime() > parseDT(returnTime).getTime()))) returnTime = t;
+          });
+          if (!returnTime && b.returndatetime) returnTime = b.returndatetime;
+        }
+
+        const dt = parseDT(b.borrowdatetime);
+
+        return {
+          borrow_id: b.borrow_id,
+          borrowdatetime: b.borrowdatetime,
+          dateStr: toDateStr(b.borrowdatetime),
+          ts: dt ? dt.getTime() : 0,
+          student_id: b.student_id,
+          borrowname: b.borrowname,
+          itemText,
+          status: b.status,
+          returnTime
+        };
+      });
+
+      document.getElementById('filter-date').value = toDateStr(nowISO());
+      document.getElementById('filter-date').addEventListener('change', render);
+      document.getElementById('search-input').addEventListener('input', render);
+
+      render();
+    })();
   </script>
 </body>
 </html>

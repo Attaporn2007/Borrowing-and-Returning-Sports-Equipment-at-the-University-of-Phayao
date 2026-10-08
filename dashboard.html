@@ -5,31 +5,37 @@
   <title>คลังอุปกรณ์</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
   <style>@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap'); * { font-family: 'Kanit', sans-serif; }</style>
 </head>
 <body class="bg-[#f0f4f8] p-6 text-slate-700">
-  <div class="max-w-4xl mx-auto space-y-6">
+  <div class="max-w-6xl mx-auto space-y-6">
     <header class="bg-white p-4 rounded-2xl shadow-sm border flex justify-between items-center">
-      <h1 class="text-xl font-bold text-blue-600">คลังอุปกรณ์ (Dashboard)</h1>
       <div class="flex items-center gap-3">
-        <nav class="flex gap-2 text-sm font-medium">
-          <a href="index.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">ค้นหา</a>
-          <a href="borrow-table.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">ตารางยืม-คืน</a>
-          <a href="dashboard.html" class="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg">คลังอุปกรณ์</a>
-          <a href="status.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">สถานะ/Blacklist</a>
-          <a href="history.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">ประวัติรายวัน</a>
-        </nav>
-        <button onclick="logout()" class="ml-2 px-3 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg text-sm font-bold flex items-center gap-1.5 transition">
+        <span class="text-3xl">📦</span>
+        <div>
+          <h1 class="text-xl font-bold text-blue-600">คลังอุปกรณ์ (Dashboard)</h1>
+          <p class="text-xs text-slate-400">Database Project</p>
+        </div>
+      </div>
+      <nav class="flex items-center gap-2 text-sm font-medium">
+        <a href="index.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">ค้นหา</a>
+        <a href="borrow-table.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">ตารางยืม-คืน</a>
+        <a href="dashboard.html" class="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg">คลังอุปกรณ์</a>
+        <a href="status.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">สถานะ/Blacklist</a>
+        <a href="history.html" class="px-3 py-2 hover:bg-slate-100 rounded-lg">ประวัติรายวัน</a>
+        <button onclick="logout()" class="ml-2 px-3 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg font-bold flex items-center gap-1.5 transition">
           <i class="fa-solid fa-right-from-bracket"></i> ออกจากระบบ
         </button>
-      </div>
+      </nav>
     </header>
 
     <main class="bg-white p-6 rounded-2xl shadow-sm border space-y-4">
       <h2 class="font-bold text-slate-800">เพิ่ม / ปรับจำนวนอุปกรณ์ในคลัง</h2>
       <div class="flex gap-2">
         <input type="text" id="item-name" placeholder="ชื่ออุปกรณ์" class="border rounded-lg px-3 py-2 text-sm flex-1">
-        <input type="number" id="item-qty" placeholder="จำนวน" value="1" class="border rounded-lg px-3 py-2 text-sm w-24">
+        <input type="number" id="item-qty" placeholder="จำนวน" value="1" min="0" class="border rounded-lg px-3 py-2 text-sm w-24">
         <button onclick="addInventory()" class="bg-emerald-600 text-white text-sm px-4 py-2 rounded-lg font-medium">บันทึกอุปกรณ์</button>
       </div>
 
@@ -55,51 +61,93 @@
       }
     }
 
-    function getInv() { return JSON.parse(localStorage.getItem('inventory') || '[{"id":1,"name":"ไม้แบด+ลูก","qty":2},{"id":2,"name":"สายแปลง HDMI","qty":0}]'); }
+    let invRemote = false;
 
-    function renderInv() {
-      const inv = getInv();
-      document.getElementById('inventory-body').innerHTML = inv.map(i => {
-        const isOut = i.qty <= 0;
+    async function renderInv() {
+      const { rows, remote } = await fetchRows('item', 'inventory');
+      invRemote = remote;
+      const items = toItemRows(rows);
+
+      document.getElementById('inventory-body').innerHTML = items.map(i => {
+        const isOut = i.availablequantity <= 0;
         return `
           <tr class="border-b">
-            <td class="p-2 font-medium">${i.name}</td>
+            <td class="p-2 font-medium">${i.itemname}</td>
             <td class="p-2 text-center">
-              <input type="number" value="${i.qty}" onchange="updateQty(${i.id}, this.value)" class="w-16 border text-center rounded px-1">
+              <input type="number" value="${i.availablequantity}" onchange="updateQty(${i.item_id}, this.value)" class="w-16 border text-center rounded px-1">
             </td>
             <td class="p-2 text-center">
               <span class="px-2 py-1 text-xs rounded-full font-bold ${isOut ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'}">
                 ${isOut ? 'ของหมด' : 'มีของในคลัง'}
               </span>
             </td>
-            <td class="p-2 text-center"><button onclick="deleteInv(${i.id})" class="text-rose-500 font-bold">ลบ</button></td>
+            <td class="p-2 text-center"><button onclick="deleteInv(${i.item_id})" class="text-rose-500 font-bold">ลบ</button></td>
           </tr>`;
-      }).join('');
+      }).join('') || '<tr><td colspan="4" class="p-4 text-center text-slate-400">ยังไม่มีอุปกรณ์ในคลัง</td></tr>';
     }
 
-    function addInventory() {
-      const name = document.getElementById('item-name').value;
+    async function addInventory() {
+      const name = document.getElementById('item-name').value.trim();
       const qty = parseInt(document.getElementById('item-qty').value);
-      if(!name) return;
-      const inv = getInv();
-      inv.push({ id: Date.now(), name, qty });
-      localStorage.setItem('inventory', JSON.stringify(inv));
+      if (!name) { alert('กรุณากรอกชื่ออุปกรณ์'); return; }
+
+      if (!invRemote) {
+        const inv = localInventory();
+        inv.push({ id: Date.now(), name, qty });
+        saveLocalInventory(inv);
+        document.getElementById('item-name').value = '';
+        document.getElementById('item-qty').value = '1';
+        renderInv();
+        return;
+      }
+
+      const { error } = await sb.from('item').insert([{
+        itemname: name,
+        totalquantity: qty,
+        availablequantity: qty,
+        status: qty > 0 ? 'พร้อมใช้งาน' : 'ของหมด',
+        category_id: null
+      }]);
+
+      if (error) { alert('บันทึกไม่สำเร็จ: ' + error.message); return; }
+      document.getElementById('item-name').value = '';
+      document.getElementById('item-qty').value = '1';
       renderInv();
     }
 
-    function updateQty(id, newQty) {
-      const inv = getInv();
-      const item = inv.find(i => i.id === id);
-      if (item) {
-        item.qty = parseInt(newQty) || 0;
-        localStorage.setItem('inventory', JSON.stringify(inv));
+    async function updateQty(id, newQty) {
+      const qty = parseInt(newQty) || 0;
+
+      if (!invRemote) {
+        const inv = localInventory();
+        const item = inv.find(i => i.id === id);
+        if (item) { item.qty = qty; saveLocalInventory(inv); }
         renderInv();
+        return;
       }
+
+      const { data: item } = await sb.from('item').select('*').eq('item_id', id).single();
+      if (!item) return;
+
+      await sb.from('item').update({
+        availablequantity: qty,
+        totalquantity: qty > item.totalquantity ? qty : item.totalquantity,
+        status: qty > 0 ? 'พร้อมใช้งาน' : 'ของหมด'
+      }).eq('item_id', id);
+      renderInv();
     }
 
-    function deleteInv(id) {
-      let inv = getInv().filter(i => i.id !== id);
-      localStorage.setItem('inventory', JSON.stringify(inv));
+    async function deleteInv(id) {
+      if (!confirm('ต้องการลบอุปกรณ์นี้ออกจากคลังหรือไม่?')) return;
+
+      if (!invRemote) {
+        saveLocalInventory(localInventory().filter(i => i.id !== id));
+        renderInv();
+        return;
+      }
+
+      const { error } = await sb.from('item').delete().eq('item_id', id);
+      if (error) { alert('ลบไม่สำเร็จ (อาจถูกใช้ในรายการยืมอยู่): ' + error.message); return; }
       renderInv();
     }
 

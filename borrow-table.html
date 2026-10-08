@@ -8,6 +8,8 @@
   <!-- CDN ตกแต่งหน้าตา (Tailwind + FontAwesome + Kanit Font) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap');
     * { font-family: 'Kanit', sans-serif; }
@@ -51,9 +53,7 @@
               <th class="p-2 border">ชื่อจริง</th>
               <th class="p-2 border">สิ่งของ</th>
               <th class="p-2 border text-center">จำนวน</th>
-              <th class="p-2 border">ของค้ำประกัน</th>
               <th class="p-2 border">เวลาที่ยืม</th>
-              <th class="p-2 border">เวลาที่คืน</th>
               <th class="p-2 border text-center">จัดการ (3 ปุ่ม)</th>
             </tr>
           </thead>
@@ -80,68 +80,172 @@
       }
     }
 
-    // 3. โหลดข้อมูลตาราง
-    function loadData() {
-      const borrows = JSON.parse(localStorage.getItem('borrows') || '[]');
-      const active = borrows.filter(b => b.status === 'กำลังยืม');
+    // 3. โหลดข้อมูลตาราง (DB หรือระบบเดิม)
+    let dataRemote = false;
+    let borrowBusy = false;
+
+    async function loadData() {
+      const bundle = await getBorrowBundle();
+      dataRemote = bundle.remote;
+      const { items } = bundle;
+
+      const students = await fetchStudents();
+
+      const active = (bundle.borrows || []).filter(b => b.status === 'กำลังยืม' || b.status === 'เกินกำหนด');
+      const itemMap = {}, stuMap = {};
+      (items || []).forEach(i => itemMap[i.item_id] = i);
+      students.forEach(s => stuMap[s.student_id] = s);
+
       const tbody = document.getElementById('table-body');
-      
-      tbody.innerHTML = active.map((b, index) => `
+      const rows = active.map(b => {
+        const lines = (bundle.borrowitems || []).filter(x => x.borrow_id === b.borrow_id);
+        const stu = stuMap[b.student_id];
+        return {
+          ...b,
+          citizen: (stu && stu.citizen_id) || b.citizen_id || '-',
+          itemNames: lines.map(x => itemMap[x.item_id] ? itemMap[x.item_id].itemname : (x.itemname || 'อุปกรณ์ #' + x.item_id)).join(', ') || '-',
+          totalQty: lines.reduce((s, x) => s + Number(x.quantity || 0), 0)
+        };
+      });
+
+      tbody.innerHTML = rows.map((b, index) => `
         <tr class="border-b hover:bg-slate-50">
           <td class="p-2 border text-center">${index + 1}</td>
-          <td class="p-2 border font-mono">${b.citizenId}</td>
-          <td class="p-2 border font-mono">${b.studentId}</td>
-          <td class="p-2 border font-bold text-slate-800">${b.name}</td>
-          <td class="p-2 border">${b.item}</td>
-          <td class="p-2 border text-center font-semibold">${b.qty}</td>
-          <td class="p-2 border">${b.collateral}</td>
-          <td class="p-2 border font-mono text-slate-500">${b.borrowTime}</td>
-          <td class="p-2 border font-mono text-slate-500">${b.returnTime || '-'}</td>
+          <td class="p-2 border font-mono">${b.citizen}</td>
+          <td class="p-2 border font-mono">${b.student_id}</td>
+          <td class="p-2 border font-bold text-slate-800">${b.borrowname}</td>
+          <td class="p-2 border">${b.itemNames}</td>
+          <td class="p-2 border text-center font-semibold">${b.totalQty}</td>
+          <td class="p-2 border font-mono text-slate-500">${fmtDT(b.borrowdatetime)}</td>
           <td class="p-2 border text-center">
             <div class="flex justify-center items-center gap-1.5">
-              <button onclick="completeBorrow(${b.id})" class="bg-emerald-500 hover:bg-emerald-600 text-white w-8 h-8 rounded-lg flex items-center justify-center shadow-sm transition" title="เสร็จสิ้น">
+              <button onclick="completeBorrow(${b.borrow_id}, this)" class="bg-emerald-500 hover:bg-emerald-600 text-white w-8 h-8 rounded-lg flex items-center justify-center shadow-sm transition" title="เสร็จสิ้น">
                 <i class="fa-solid fa-check"></i>
               </button>
-              <button onclick="setBlacklist(${b.id})" class="bg-amber-500 hover:bg-amber-600 text-white px-2.5 h-8 rounded-lg flex items-center justify-center gap-1 text-xs font-bold shadow-sm transition" title="Blacklist">
+              <button onclick="setBlacklist(${b.borrow_id})" class="bg-amber-500 hover:bg-amber-600 text-white px-2.5 h-8 rounded-lg flex items-center justify-center gap-1 text-xs font-bold shadow-sm transition" title="Blacklist">
                 <i class="fa-solid fa-triangle-exclamation"></i> Blacklist
               </button>
-              <button onclick="cancelBorrow(${b.id})" class="bg-rose-500 hover:bg-rose-600 text-white w-8 h-8 rounded-lg flex items-center justify-center shadow-sm transition" title="ยกเลิก">
+              <button onclick="cancelBorrow(${b.borrow_id})" class="bg-rose-500 hover:bg-rose-600 text-white w-8 h-8 rounded-lg flex items-center justify-center shadow-sm transition" title="ยกเลิก">
                 <i class="fa-solid fa-xmark"></i>
               </button>
             </div>
           </td>
         </tr>
-      `).join('') || '<tr><td colspan="10" class="p-6 text-center text-slate-400">ไม่มีรายการยืม</td></tr>';
+      `).join('') || '<tr><td colspan="8" class="p-6 text-center text-slate-400">ไม่มีรายการยืม</td></tr>';
     }
 
-    function completeBorrow(id) {
-      const borrows = JSON.parse(localStorage.getItem('borrows') || '[]');
-      const item = borrows.find(b => b.id === id);
-      if (item) {
-        const now = new Date();
-        item.status = 'คืนแล้ว';
-        item.returnTime = `${now.getHours()}.${now.getMinutes().toString().padStart(2,'0')}`;
-        localStorage.setItem('borrows', JSON.stringify(borrows));
+    // คืนของ (ล็อกปุ่มไม่ให้กดซ้ำระหว่างประมวลผล)
+    async function completeBorrow(id, btn) {
+      if (borrowBusy) return;
+      borrowBusy = true;
+      if (btn) { btn.disabled = true; btn.classList.add('opacity-50', 'cursor-not-allowed'); }
+
+      try {
+        if (!dataRemote) {
+          const arr = localBorrows();
+          const b = arr.find(x => x.id === id);
+          if (b) {
+            const now = new Date();
+            b.status = 'คืนแล้ว';
+            b.returnTime = `${now.getHours()}.${now.getMinutes().toString().padStart(2, '0')}`;
+            saveLocalBorrows(arr);
+          }
+          loadData();
+          return;
+        }
+
+        const { data: lines } = await sb.from('borrowitem').select('*').eq('borrow_id', id);
+
+        await sb.from('borrow').update({ status: 'คืนแล้ว' }).eq('borrow_id', id);
+        await sb.from('borrowitem').update({ status: 'คืนแล้ว' }).eq('borrow_id', id);
+
+        const { data: br } = await sb.from('borrow').select('duetime').eq('borrow_id', id).single();
+        const stamp = nowISO();
+        const due = (br && br.duetime) || stamp;
+
+        for (const line of (lines || [])) {
+          // บันทึกเวลาคืนจริงลงตาราง return (คอลัมน์ returndatetime)
+          const { error: rErr } = await sb.from('return').insert([{
+            borrowitem_id: line.borrowitem_id,
+            duetime: due,
+            returndatetime: stamp
+          }]);
+          // กรณียังไม่มีคอลัมน์ returndatetime ใน DB ให้ fallback บันทึกแค่ duetime
+          if (rErr) {
+            await sb.from('return').insert([{ borrowitem_id: line.borrowitem_id, duetime: stamp }]);
+          }
+
+          const { data: item } = await sb.from('item').select('*').eq('item_id', line.item_id).single();
+          if (item) {
+            await sb.from('item').update({ availablequantity: item.availablequantity + Number(line.quantity || 0) }).eq('item_id', line.item_id);
+          }
+        }
         loadData();
+      } finally {
+        borrowBusy = false;
+        if (btn) { btn.disabled = false; btn.classList.remove('opacity-50', 'cursor-not-allowed'); }
       }
     }
 
-    function setBlacklist(id) {
-      if (!confirm('ย้ายรายชื่อนี้ไปที่ Blacklist ใช่หรือไม่?')) return;
-      const borrows = JSON.parse(localStorage.getItem('borrows') || '[]');
-      const item = borrows.find(b => b.id === id);
-      if (item) {
-        item.status = 'Blacklist';
-        localStorage.setItem('borrows', JSON.stringify(borrows));
+    // ติด Blacklist
+    async function setBlacklist(id) {
+      if (!dataRemote) {
+        if (!confirm('ย้ายรายชื่อนี้ไปที่ Blacklist ใช่หรือไม่?')) return;
+        const arr = localBorrows();
+        const b = arr.find(x => x.id === id);
+        if (b) { b.status = 'Blacklist'; saveLocalBorrows(arr); }
         loadData();
+        return;
+      }
+
+      const reason = prompt('เหตุผลที่ติด Blacklist:', 'ไม่นำอุปกรณ์มาคืนตามกำหนดเวลา');
+      if (reason === null) return;
+      if (borrowBusy) return;
+      borrowBusy = true;
+
+      try {
+        const { data: lines } = await sb.from('borrowitem').select('*').eq('borrow_id', id);
+
+        await sb.from('borrow').update({ status: 'Blacklist' }).eq('borrow_id', id);
+        await sb.from('borrowitem').update({ status: 'Blacklist' }).eq('borrow_id', id);
+
+        // สร้าง return เพียง 1 แถวต่อ 1 ใบยืม เพื่อผูก blacklist (แสดง 1 รายการต่อใบยืม)
+        let returnId = null;
+        const firstLine = (lines && lines.length) ? lines[0] : null;
+        if (firstLine) {
+          const { data: ret } = await sb.from('return').insert([{ borrowitem_id: firstLine.borrowitem_id, duetime: nowISO() }]).select().single();
+          if (ret) returnId = ret.return_id;
+        }
+
+        await sb.from('blacklist').insert([{ return_id: returnId, reason, status: 'ติด Blacklist' }]);
+        loadData();
+      } finally {
+        borrowBusy = false;
       }
     }
 
-    function cancelBorrow(id) {
+    // ยกเลิกรายการ
+    async function cancelBorrow(id) {
+      if (!dataRemote) {
+        if (!confirm('ต้องการยกเลิกรายการนี้หรือไม่?')) return;
+        saveLocalBorrows(localBorrows().filter(x => x.id !== id));
+        loadData();
+        return;
+      }
+
       if (!confirm('ต้องการยกเลิกรายการนี้หรือไม่?')) return;
-      let borrows = JSON.parse(localStorage.getItem('borrows') || '[]');
-      borrows = borrows.filter(b => b.id !== id);
-      localStorage.setItem('borrows', JSON.stringify(borrows));
+
+      const { data: lines } = await sb.from('borrowitem').select('*').eq('borrow_id', id);
+
+      for (const line of (lines || [])) {
+        const { data: item } = await sb.from('item').select('*').eq('item_id', line.item_id).single();
+        if (item) {
+          await sb.from('item').update({ availablequantity: item.availablequantity + Number(line.quantity || 0) }).eq('item_id', line.item_id);
+        }
+      }
+
+      await sb.from('borrowitem').delete().eq('borrow_id', id);
+      await sb.from('borrow').delete().eq('borrow_id', id);
       loadData();
     }
 

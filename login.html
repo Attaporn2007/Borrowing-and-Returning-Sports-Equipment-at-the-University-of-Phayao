@@ -6,6 +6,8 @@
   <title>เข้าสู่ระบบ - ระบบยืม-คืนอุปกรณ์</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
 </head>
 <body class="bg-slate-100 font-sans h-screen flex items-center justify-center p-4">
 
@@ -97,23 +99,28 @@
   </div>
 
   <script>
-    // รหัสผ่านระบบ
+    // บัญชีเดียวของระบบ (ถ้าอ่านตาราง User ไม่ได้จะใช้ค่านี้แทน)
     const AUTH_USER = "Adminsgn01";
     const AUTH_PASS = "Adminsgnup01";
 
-    // ฟังก์ชันตรวจสอบการล็อกอิน
-    function handleLogin(event) {
+    async function handleLogin(event) {
       event.preventDefault();
       const userIn = document.getElementById('username').value.trim();
       const passIn = document.getElementById('password').value.trim();
       const errorMsg = document.getElementById('error-msg');
 
-      if (userIn === AUTH_USER && passIn === AUTH_PASS) {
-        // บันทึกสถานะการล็อกอินทั้งแบบ localStorage และ sessionStorage เพื่อป้องกันปัญหาสื่อสารข้ามหน้า
+      let ok = userIn === AUTH_USER && passIn === AUTH_PASS;
+
+      // ลองเช็คกับตาราง User ใน database เพิ่มเติม (ค่าคงที่ด้านบนยังใช้ได้เสมอ)
+      try {
+        const { data, error } = await sb.from('User').select('*').eq('username', userIn).eq('password', passIn);
+        if (!error && Array.isArray(data) && data.length > 0) ok = true;
+      } catch (e) { }
+
+      if (ok) {
         localStorage.setItem('isLoggedIn', 'true');
         sessionStorage.setItem('isLoggedIn', 'true');
-        
-        // เปลี่ยนหน้าไปยัง index.html
+        localStorage.setItem('adminUser', JSON.stringify({ username: userIn }));
         window.location.href = 'index.html';
       } else {
         errorMsg.classList.remove('hidden');

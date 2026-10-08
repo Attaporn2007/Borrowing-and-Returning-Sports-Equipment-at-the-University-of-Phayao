@@ -6,6 +6,8 @@
   <title>โปรไฟล์ผู้ยืม</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap');
     * { font-family: 'Kanit', sans-serif; }
@@ -35,13 +37,12 @@
       <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2 text-emerald-600">
         <i class="fa-solid fa-circle-plus"></i> บันทึกการยืมอุปกรณ์ใหม่
       </h3>
-      <form onsubmit="handleBorrow(event)" class="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <input type="text" id="borrow-item" required placeholder="ของที่ยืม (เช่น ไม้แบด+ลูก)" class="border rounded-lg p-2.5 text-sm outline-none focus:border-blue-500 md:col-span-1">
+      <form onsubmit="handleBorrow(event)" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <input type="text" list="item-suggestions" id="borrow-item" required placeholder="พิมพ์หรือเลือกอุปกรณ์ เช่น ไม้แบด+ลูกแบด" class="border rounded-lg p-2.5 text-sm outline-none focus:border-blue-500">
+        <datalist id="item-suggestions"></datalist>
+
+        <input type="text" id="borrow-qty" value="1" required placeholder="จำนวน เช่น 2+1" class="border rounded-lg p-2.5 text-sm outline-none focus:border-blue-500 text-center">
         
-        <!-- ปรับเป็น type="text" เพื่อให้รองรับข้อความเช่น "2+1" หรือ "1 ชุด" ได้ -->
-        <input type="text" id="borrow-qty" value="1" required placeholder="จำนวน (เช่น 1 หรือ 2+1)" class="border rounded-lg p-2.5 text-sm outline-none focus:border-blue-500 text-center">
-        
-        <input type="text" id="borrow-collateral" required placeholder="ของค้ำประกัน (เช่น บัตรประชาชน/กระเป๋า)" class="border rounded-lg p-2.5 text-sm outline-none focus:border-blue-500 md:col-span-1">
         <button type="submit" class="bg-emerald-600 text-white font-medium p-2.5 rounded-lg text-sm hover:bg-emerald-700 transition flex items-center justify-center gap-1">
           <i class="fa-solid fa-plus"></i> เพิ่มลงในรายการ
         </button>
@@ -60,7 +61,6 @@
               <th class="p-2 border">อุปกรณ์</th>
               <th class="p-2 border text-center">จำนวน</th>
               <th class="p-2 border">เวลายืม</th>
-              <th class="p-2 border">เวลาคืน</th>
               <th class="p-2 border text-center">สถานะ</th>
             </tr>
           </thead>
@@ -89,15 +89,16 @@
     const type = urlParams.get('type');
 
     let currentUser = null;
+    let itemRemote = false;
 
-    function init() {
-      const users = JSON.parse(localStorage.getItem('users') || '[]');
-      currentUser = users.find(u => u.studentId === searchId || u.citizenId === searchId);
+    async function init() {
+      const students = await fetchStudents();
+      currentUser = students.find(u => u.student_id === searchId || u.citizen_id === searchId);
 
       if (isNew || !currentUser) {
         renderNewUserForm();
       } else {
-        renderUserProfile();
+        await renderUserProfile();
       }
     }
 
@@ -140,7 +141,7 @@
       `;
     }
 
-    function saveNewUser(e) {
+    async function saveNewUser(e) {
       e.preventDefault();
       const name = document.getElementById('reg-name').value.trim();
       const phone = document.getElementById('reg-phone').value.trim();
@@ -152,23 +153,39 @@
         return;
       }
 
-      const users = JSON.parse(localStorage.getItem('users') || '[]');
-      currentUser = { name, phone, studentId, citizenId, status: 'ปกติ' };
-      users.push(currentUser);
-      localStorage.setItem('users', JSON.stringify(users));
+      // บันทึกลงตาราง student ใน database (ถ้าเขียนไม่ได้จะใช้ localStorage แทน)
+      let saved = false;
+      try {
+        const { error } = await sb.from('student').upsert({
+          student_id: studentId,
+          citizen_id: citizenId,
+          name,
+          phone,
+          status: 'ปกติ'
+        });
+        if (!error) saved = true;
+      } catch (e) { }
 
-      alert('บันทึกข้อมูลผู้ยืมเรียบร้อยแล้ว!');
-      renderUserProfile();
+      // เก็บลง localStorage เสมอ (ระบบเดิม/สำรอง)
+      const users = localUsers().filter(u => u.studentId !== studentId);
+      users.push({ name, phone, studentId, citizenId, status: 'ปกติ' });
+      saveLocalUsers(users);
+      currentUser = { student_id: studentId, citizen_id: citizenId, name, phone, status: 'ปกติ' };
+
+      alert(saved
+        ? 'บันทึกข้อมูลผู้ยืมลงฐานข้อมูล (Supabase) เรียบร้อยแล้ว!'
+        : 'บันทึกข้อมูลผู้ยืมเรียบร้อยแล้ว (ยังลงตาราง database ไม่ได้ — ให้รัน SQL สร้างตาราง student ใน Supabase ก่อน แล้วสมัครใหม่)');
+      await renderUserProfile();
     }
 
-    function renderUserProfile() {
+    async function renderUserProfile() {
       document.getElementById('profile-card').innerHTML = `
         <div class="flex justify-between items-start">
           <div>
             <h2 class="text-xl font-bold text-slate-800">${currentUser.name}</h2>
             <p class="text-xs text-slate-500 mt-1 font-mono">
-              รหัสนิสิต: <span class="font-bold text-slate-700">${currentUser.studentId}</span> | 
-              เลขบัตร: <span class="font-bold text-slate-700">${currentUser.citizenId}</span> | 
+              รหัสนิสิต: <span class="font-bold text-slate-700">${currentUser.student_id}</span> | 
+              เลขบัตร: <span class="font-bold text-slate-700">${currentUser.citizen_id || '-'}</span> | 
               เบอร์โทร: <span class="font-bold text-slate-700">${currentUser.phone || '-'}</span>
             </p>
           </div>
@@ -180,53 +197,163 @@
 
       document.getElementById('borrow-form-section').classList.remove('hidden');
       document.getElementById('history-section').classList.remove('hidden');
-      loadUserHistory();
+      await loadItemOptions();
+      await loadUserHistory();
     }
 
-    function handleBorrow(e) {
+    // โหลดรายการอุปกรณ์มาเป็น autocomplete สำหรับฟอร์มยืม (พิมพ์เองได้หรือเลือกก็ได้)
+    async function loadItemOptions() {
+      const { rows, remote } = await fetchRows('item', 'inventory');
+      itemRemote = remote;
+      const items = toItemRows(rows);
+
+      document.getElementById('item-suggestions').innerHTML = items.map(i =>
+        `<option value="${i.itemname}">${i.availablequantity > 0 ? 'เหลือ ' + i.availablequantity : 'ของหมด'}</option>`
+      ).join('');
+    }
+
+    async function handleBorrow(e) {
       e.preventDefault();
-      const item = document.getElementById('borrow-item').value;
-      const qty = document.getElementById('borrow-qty').value;
-      const collateral = document.getElementById('borrow-collateral').value;
+      const itemText = document.getElementById('borrow-item').value.trim();
+      const qtyText = document.getElementById('borrow-qty').value.trim() || '1';
 
-      const now = new Date();
-      const borrowTime = `${now.getHours()}.${now.getMinutes().toString().padStart(2,'0')}`;
+      if (!itemText) { alert('กรุณาพิมพ์หรือเลือกอุปกรณ์'); return; }
 
-      const borrows = JSON.parse(localStorage.getItem('borrows') || '[]');
-      borrows.push({
-        id: Date.now(),
-        studentId: currentUser.studentId,
-        citizenId: currentUser.citizenId,
-        name: currentUser.name,
-        item,
-        qty,
-        collateral,
-        borrowTime,
-        status: 'กำลังยืม'
-      });
+      const { rows } = await fetchRows('item', 'inventory');
+      const items = toItemRows(rows);
+      const qty = parseQty(qtyText, 1);
 
-      localStorage.setItem('borrows', JSON.stringify(borrows));
+      // พิมพ์ตรงกับชื่อในคลัง 1 ชิ้น / พิมพ์หลายชิ้นคั่นด้วย + เช่น "ไม้แบด+ลูกแบด"
+      const matched = items.find(i => (i.itemname || '').trim().toLowerCase() === itemText.toLowerCase());
+      const multiNames = matched ? [] : itemText.split('+').map(s => s.trim()).filter(Boolean);
+      const multiItems = multiNames.map(name => items.find(i => (i.itemname || '').trim().toLowerCase() === name.toLowerCase()));
+      const multiOk = multiNames.length > 0 && multiItems.every(Boolean);
+
+      // โหมด database บันทึกได้เฉพาะชื่อที่ตรงกับคลัง (พิมพ์อิสระใช้ได้เฉพาะระบบเดิม)
+      if (itemRemote && !matched && !multiOk) {
+        alert('ไม่พบอุปกรณ์ในคลัง — พิมพ์ชื่อให้ตรงกับรายการ หรือพิมพ์หลายชิ้นคั่นด้วย + เช่น ไม้แบด+ลูกแบด');
+        return;
+      }
+
+      if (matched && qty > matched.availablequantity) {
+        alert(`จำนวนยืมเกินคงเหลือ (${matched.itemname} เหลือ ${matched.availablequantity} ชิ้น)`);
+        return;
+      }
+
+      let qtyParts = null;
+      if (multiOk) {
+        qtyParts = qtyText.split('+').map(s => parseInt(s.trim(), 10));
+        if (qtyParts.length !== multiItems.length || qtyParts.some(n => isNaN(n) || n < 1)) {
+          alert(`จำนวนต้องใส่เท่ากับจำนวนชิ้น เช่น พิมพ์ "${multiNames.join('+')}" แล้วจำนวนใส่ "${multiNames.map(() => 1).join('+')}"`);
+          return;
+        }
+        const badIdx = multiItems.findIndex((it, idx) => qtyParts[idx] > it.availablequantity);
+        if (badIdx > -1) {
+          alert(`จำนวนยืมเกินคงเหลือ (${multiItems[badIdx].itemname} เหลือ ${multiItems[badIdx].availablequantity} ชิ้น)`);
+          return;
+        }
+      }
+
+      if (!itemRemote) {
+        // ระบบเดิม: เก็บข้อความตามที่พิมพ์ลง localStorage (หักสต็อกทีละชิ้นเมื่อตรงรายการ)
+        const inv = localInventory();
+        if (matched) {
+          const target = inv.find(i => i.id === matched.item_id);
+          if (target) target.qty = (Number(target.qty) || 0) - qty;
+        } else if (qtyParts) {
+          multiItems.forEach((it, idx) => {
+            const target = inv.find(i => i.id === it.item_id);
+            if (target) target.qty = (Number(target.qty) || 0) - qtyParts[idx];
+          });
+        }
+        saveLocalInventory(inv);
+        const now = new Date();
+        const borrows = localBorrows();
+        borrows.push({
+          id: Date.now(),
+          studentId: currentUser.student_id,
+          citizenId: currentUser.citizen_id,
+          name: currentUser.name,
+          item: itemText,
+          qty: qtyText,
+          borrowTime: `${now.getHours()}.${now.getMinutes().toString().padStart(2, '0')}`,
+          status: 'กำลังยืม'
+        });
+        saveLocalBorrows(borrows);
+        alert('บันทึกรายการยืมสำเร็จ!');
+        window.location.href = 'borrow-table.html';
+        return;
+      }
+
+      // โหมด database
+      let userId = null;
+      const { data: adminRows } = await sb.from('User').select('user_id').limit(1);
+      if (adminRows && adminRows.length) userId = adminRows[0].user_id;
+      const admin = currentAdmin();
+      if (admin && admin.user_id) userId = admin.user_id;
+
+      const { data: borrow, error: bErr } = await sb.from('borrow').insert([{
+        borrowdatetime: nowISO(),
+        student_id: currentUser.student_id,
+        national_id: currentUser.citizen_id || null,
+        borrowname: currentUser.name,
+        status: 'กำลังยืม',
+        duetime: dueISO(),
+        user_id: userId
+      }]).select().single();
+
+      if (bErr) { alert('บันทึกการยืมไม่สำเร็จ: ' + bErr.message); return; }
+
+      const lines = matched
+        ? [{ item_id: matched.item_id, quantity: qty }]
+        : multiItems.map((it, idx) => ({ item_id: it.item_id, quantity: qtyParts[idx] }));
+
+      for (const line of lines) {
+        const { error: biErr } = await sb.from('borrowitem').insert([{
+          quantity: line.quantity,
+          status: 'กำลังยืม',
+          borrow_id: borrow.borrow_id,
+          item_id: line.item_id
+        }]);
+        if (biErr) { alert('บันทึกรายการอุปกรณ์ไม่สำเร็จ: ' + biErr.message); return; }
+      }
+
+      for (const it of (matched ? [matched] : multiItems)) {
+        const line = lines.find(l => l.item_id === it.item_id);
+        await sb.from('item').update({ availablequantity: it.availablequantity - line.quantity }).eq('item_id', it.item_id);
+      }
+
       alert('บันทึกรายการยืมสำเร็จ!');
-      
       window.location.href = 'borrow-table.html';
     }
 
-    function loadUserHistory() {
-      const borrows = JSON.parse(localStorage.getItem('borrows') || '[]');
-      const userBorrows = borrows.filter(b => b.studentId === currentUser.studentId || b.citizenId === currentUser.citizenId);
-      const tbody = document.getElementById('user-history-body');
+    async function loadUserHistory() {
+      const bundle = await getBorrowBundle();
+      const itemMap = {};
+      (bundle.items || []).forEach(i => itemMap[i.item_id] = i);
 
-      tbody.innerHTML = userBorrows.map(b => `
+      const rows = [];
+      (bundle.borrows || [])
+        .filter(b => b.student_id === currentUser.student_id)
+        .forEach(b => {
+          const lines = (bundle.borrowitems || []).filter(x => x.borrow_id === b.borrow_id);
+          const names = lines.map(x => `${itemMap[x.item_id] ? itemMap[x.item_id].itemname : (x.itemname || 'อุปกรณ์ #' + x.item_id)} (${x.quantity})`).join(', ');
+          // ถ้าพิมพ์จำนวนแบบมีสูตร เช่น "2+1" ให้แสดงตามที่พิมพ์ ไม่แปลงเป็นผลรวม
+          const qty = (b.qty !== undefined && b.qty !== null && isNaN(Number(b.qty))) ? b.qty
+            : lines.reduce((s, x) => s + Number(x.quantity || 0), 0);
+          rows.push({ ...b, item: names || '-', qty });
+        });
+
+      document.getElementById('user-history-body').innerHTML = rows.map(b => `
         <tr class="border-b">
           <td class="p-2 border font-medium">${b.item}</td>
           <td class="p-2 border text-center font-bold">${b.qty}</td>
-          <td class="p-2 border font-mono text-slate-500">${b.borrowTime}</td>
-          <td class="p-2 border font-mono text-slate-500">${b.returnTime || '-'}</td>
+          <td class="p-2 border font-mono text-slate-500">${fmtDT(b.borrowdatetime)}</td>
           <td class="p-2 border text-center">
-            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${b.status === 'กำลังยืม' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}">${b.status}</span>
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${b.status === 'คืนแล้ว' ? 'bg-emerald-100 text-emerald-600' : (b.status === 'Blacklist' || b.status === 'เกินกำหนด') ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-700'}">${b.status}</span>
           </td>
         </tr>
-      `).join('') || '<tr><td colspan="5" class="p-4 text-center text-slate-400">ยังไม่มีประวัติการยืม</td></tr>';
+      `).join('') || '<tr><td colspan="4" class="p-4 text-center text-slate-400">ยังไม่มีประวัติการยืม</td></tr>';
     }
 
     init();

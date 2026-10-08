@@ -11,6 +11,7 @@
     * { font-family: 'Kanit', sans-serif; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
 </head>
 <body class="bg-[#f0f4f8] p-6 text-slate-700">
   <div class="max-w-6xl mx-auto space-y-6">
@@ -71,7 +72,7 @@
     }
 
     // 2. ฟังก์ชันค้นหาพร้อม Validation
-    function search() {
+    async function search() {
       const val = document.getElementById('search-input').value.trim();
       const isNumeric = /^\d+$/.test(val);
 
@@ -81,8 +82,9 @@
         return;
       }
 
-      const users = JSON.parse(localStorage.getItem('users') || '[]');
-      const foundUser = users.find(u => u.studentId === val || u.citizenId === val);
+      const students = await fetchStudents();
+
+      const foundUser = students.find(u => u.student_id === val || u.citizen_id === val);
       const res = document.getElementById('result');
       res.classList.remove('hidden');
 
