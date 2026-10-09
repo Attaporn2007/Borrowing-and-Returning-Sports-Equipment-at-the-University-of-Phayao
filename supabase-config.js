@@ -79,7 +79,7 @@ function toItemRows(rows) {
   });
 }
 
-// ข้อมูลผู้ยืม = localStorage + คนที่เคยยืมในตาราง borrow + ตาราง student ใน database
+// ข้อมูลผู้ยืม = localStorage + คนที่เคยยืมในตาราง borrow
 async function fetchStudents() {
   const map = new Map();
 
@@ -101,23 +101,6 @@ async function fetchStudents() {
     if (!s.student_id) continue;
     map.set(String(s.student_id), { ...(map.get(String(s.student_id)) || {}), ...s });
   }
-
-  // 3) ตาราง student ใน database (ข้อมูลล่าสุด ให้ทับรายการเดิม)
-  try {
-    const { data, error } = await sb.from('student').select('*');
-    if (!error && Array.isArray(data)) {
-      for (const s of data) {
-        if (!s.student_id) continue;
-        map.set(String(s.student_id), {
-          student_id: s.student_id,
-          citizen_id: s.citizen_id || '',
-          name: s.name,
-          phone: s.phone || '',
-          status: s.status || 'ปกติ'
-        });
-      }
-    }
-  } catch (e) { }
 
   return Array.from(map.values());
 }

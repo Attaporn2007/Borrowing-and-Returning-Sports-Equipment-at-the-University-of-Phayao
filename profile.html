@@ -153,28 +153,13 @@
         return;
       }
 
-      // บันทึกลงตาราง student ใน database (ถ้าเขียนไม่ได้จะใช้ localStorage แทน)
-      let saved = false;
-      try {
-        const { error } = await sb.from('student').upsert({
-          student_id: studentId,
-          citizen_id: citizenId,
-          name,
-          phone,
-          status: 'ปกติ'
-        });
-        if (!error) saved = true;
-      } catch (e) { }
-
-      // เก็บลง localStorage เสมอ (ระบบเดิม/สำรอง)
+      // บันทึกข้อมูลผู้ยืมลง localStorage (ฐานข้อมูล 7 ตารางไม่มีตารางผู้ยืมแยก ข้อมูลผู้ยืมจะถูกบันทึกพร้อมรายการยืม)
       const users = localUsers().filter(u => u.studentId !== studentId);
       users.push({ name, phone, studentId, citizenId, status: 'ปกติ' });
       saveLocalUsers(users);
       currentUser = { student_id: studentId, citizen_id: citizenId, name, phone, status: 'ปกติ' };
 
-      alert(saved
-        ? 'บันทึกข้อมูลผู้ยืมลงฐานข้อมูล (Supabase) เรียบร้อยแล้ว!'
-        : 'บันทึกข้อมูลผู้ยืมเรียบร้อยแล้ว (ยังลงตาราง database ไม่ได้ — ให้รัน SQL สร้างตาราง student ใน Supabase ก่อน แล้วสมัครใหม่)');
+      alert('บันทึกข้อมูลผู้ยืมเรียบร้อยแล้ว!');
       await renderUserProfile();
     }
 

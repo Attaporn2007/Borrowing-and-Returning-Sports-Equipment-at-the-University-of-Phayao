@@ -159,21 +159,14 @@
         await sb.from('borrow').update({ status: 'คืนแล้ว' }).eq('borrow_id', id);
         await sb.from('borrowitem').update({ status: 'คืนแล้ว' }).eq('borrow_id', id);
 
-        const { data: br } = await sb.from('borrow').select('duetime').eq('borrow_id', id).single();
         const stamp = nowISO();
-        const due = (br && br.duetime) || stamp;
 
         for (const line of (lines || [])) {
-          // บันทึกเวลาคืนจริงลงตาราง return (คอลัมน์ returndatetime)
-          const { error: rErr } = await sb.from('return').insert([{
+          // บันทึกเวลาคืนจริงลงตาราง return (ใช้คอลัมน์ duetime)
+          await sb.from('return').insert([{
             borrowitem_id: line.borrowitem_id,
-            duetime: due,
-            returndatetime: stamp
+            duetime: stamp
           }]);
-          // กรณียังไม่มีคอลัมน์ returndatetime ใน DB ให้ fallback บันทึกแค่ duetime
-          if (rErr) {
-            await sb.from('return').insert([{ borrowitem_id: line.borrowitem_id, duetime: stamp }]);
-          }
 
           const { data: item } = await sb.from('item').select('*').eq('item_id', line.item_id).single();
           if (item) {

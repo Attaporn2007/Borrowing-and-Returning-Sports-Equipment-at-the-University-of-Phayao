@@ -1,7 +1,7 @@
 -- รันไฟล์นี้ใน SQL Editor ของ Supabase (ตารางใหม่แทนอันเดิม)
 
 -- ลบตารางเก่าทิ้งก่อน (ถ้ามีอยู่) เพื่อป้องกัน Error ซ้ำ
-DROP TABLE IF EXISTS Blacklist, Return, BorrowItem, Borrow, Item, Category, Student, "User" CASCADE;
+DROP TABLE IF EXISTS Blacklist, Return, BorrowItem, Borrow, Item, Category, "User" CASCADE;
 
 -- 1. ตาราง User (แก้ไขให้มีผู้ดูแลระบบเพียงบัญชีเดียว)
 CREATE TABLE "User" (
@@ -12,22 +12,6 @@ CREATE TABLE "User" (
 
 INSERT INTO "User" (Username, Password) VALUES
 ('Adminsgn01', 'Adminsgnup01');
-
--- 1.5 ตาราง Student (โปรไฟล์ผู้ยืมที่สมัครผ่านเว็บ)
-CREATE TABLE Student (
-    Student_ID VARCHAR(20) PRIMARY KEY,
-    Citizen_ID VARCHAR(13) NOT NULL,
-    Name VARCHAR(100) NOT NULL,
-    Phone VARCHAR(20),
-    Status VARCHAR(50) NOT NULL DEFAULT 'ปกติ'
-);
-
-INSERT INTO Student (Student_ID, Citizen_ID, Name, Phone, Status) VALUES
-('68023601', '1100100000002', 'นายกิตติศักดิ์ มั่นคง', NULL, 'ปกติ'),
-('68023602', '1100100000003', 'นางสาวณิชา เพิ่มพูน', NULL, 'ปกติ'),
-('68023603', '1100100000004', 'นายธนกฤต ชัยชนะ', NULL, 'ปกติ'),
-('68023604', '1100100000005', 'นางสาวกานต์ดา สุขสวัสดิ์', NULL, 'ปกติ'),
-('68023605', '1100100000001', 'นาย อรรถพร จันต๊ะ', NULL, 'ปกติ');
 
 -- 2. ตาราง Category
 CREATE TABLE Category (
@@ -99,16 +83,15 @@ INSERT INTO BorrowItem (Quantity, Status, Borrow_ID, Item_ID) VALUES
 CREATE TABLE Return (
     Return_ID SERIAL PRIMARY KEY,
     DueTime TIMESTAMP NOT NULL,
-    ReturnDateTime TIMESTAMP,            -- เวลาคืนจริง (NULL = ยังไม่คืน)
     BorrowItem_ID INT REFERENCES BorrowItem(BorrowItem_ID)
 );
 
-INSERT INTO Return (DueTime, ReturnDateTime, BorrowItem_ID) VALUES
-('2026-08-26 17:00:00', '2026-08-26 16:45:00', 1),
-('2026-08-26 17:00:00', NULL, 2),
-('2026-08-26 17:00:00', NULL, 3),
-('2026-08-26 17:00:00', '2026-08-26 15:30:00', 4),
-('2026-08-26 17:00:00', NULL, 5);
+INSERT INTO Return (DueTime, BorrowItem_ID) VALUES
+('2026-08-26 17:00:00', 1),
+('2026-08-26 17:00:00', 2),
+('2026-08-26 17:00:00', 3),
+('2026-08-26 17:00:00', 4),
+('2026-08-26 17:00:00', 5);
 
 -- 7. ตาราง Blacklist
 CREATE TABLE Blacklist (

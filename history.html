@@ -130,11 +130,11 @@
       (items || []).forEach(i => { itemMap[i.item_id] = i; });
 
       // map: borrowitem_id -> เวลาคืนจริง (ใช้ค่าล่าสุดถ้ามีหลายแถว)
-      // รองรับทั้งคอลัมน์ returndatetime และ fallback เป็น duetime กรณียังไม่เพิ่มคอลัมน์ใน DB
+      // ใช้คอลัมน์ duetime ของตาราง return เป็นเวลาคืนจริง
       const returnMap = {};
       (returns || []).forEach(r => {
         const bid = r.borrowitem_id;
-        const t = r.returndatetime || r.duetime || null;
+        const t = r.duetime || null;
         if (bid == null || !t) return;
         const prev = returnMap[bid];
         const a = parseDT(t), b = parseDT(prev);
@@ -157,7 +157,6 @@
             const t = returnMap[x.borrowitem_id];
             if (t && (!returnTime || (parseDT(t) && parseDT(returnTime) && parseDT(t).getTime() > parseDT(returnTime).getTime()))) returnTime = t;
           });
-          if (!returnTime && b.returndatetime) returnTime = b.returndatetime;
         }
 
         const dt = parseDT(b.borrowdatetime);

@@ -87,8 +87,8 @@
           await sb.from('blacklist').update({ status: 'ปลดล็อกแล้ว' }).eq('blacklist_id', blacklistId);
         }
         if (returnId) {
-          // ให้เวลาคืนจริงตรงกับตอนปลด เพื่อให้หน้าประวัติแสดงถูกต้อง
-          await sb.from('return').update({ returndatetime: stamp }).eq('return_id', returnId);
+          // ให้เวลาคืนจริงตรงกับตอนปลด (เก็บในคอลัมน์ duetime) เพื่อให้หน้าประวัติแสดงถูกต้อง
+          await sb.from('return').update({ duetime: stamp }).eq('return_id', returnId);
         }
         if (borrowId) {
           // ปลดแล้วถือว่าคืนเรียบร้อย (ไม่วนกลับเป็นเกินกำหนด)
